@@ -4,10 +4,8 @@ import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env["JWT_SECRET"];
 
-export interface AuthRequest extends Request {
-  userId?: string;  // Changed from number to string for UUID
-  role?: Role;
-}
+// Use the global Express.Request interface with our extensions
+export type AuthRequest = Request;
 
 export const authenticate = (req: AuthRequest, res: Response, next: NextFunction): void => {
   if (!JWT_SECRET) {

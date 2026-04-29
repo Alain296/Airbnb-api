@@ -1,4 +1,5 @@
 import multer from "multer";
+import { Request } from "express";
 
 // Use memory storage - files stay as Buffers in RAM
 // No disk writes needed before uploading to Cloudinary
@@ -6,7 +7,7 @@ const storage = multer.memoryStorage();
 
 // File filter - accept only images
 const fileFilter = (
-  req: Express.Request,
+  req: Request,
   file: Express.Multer.File,
   cb: multer.FileFilterCallback
 ) => {
