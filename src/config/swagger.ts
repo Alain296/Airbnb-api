@@ -33,18 +33,14 @@ const options = {
     },
   },
   apis: [
-    path.join(__dirname, "../routes/*.ts"),
-    path.join(__dirname, "../routes/auth.routes.ts"),
-    path.join(__dirname, "../routes/users.routes.ts"), 
-    path.join(__dirname, "../routes/listings.routes.ts"),
-    path.join(__dirname, "../routes/bookings.routes.ts"),
-    path.join(__dirname, "../routes/upload.routes.ts")
+    path.join(__dirname, "../routes/*.js"),
+    path.join(__dirname, "../routes/v1/*.js")
   ], // Path to the API files
 };
 
-const specs = swaggerJsdoc(options);
+const specs = swaggerJsdoc(options) as any;
 
-console.log("🔍 Swagger specs generated:", Object.keys(specs.paths || {}).length, "paths found");
+console.log("🔍 Swagger specs generated:", specs?.paths ? Object.keys(specs.paths).length : 0, "paths found");
 console.log("📁 API file paths:", options.apis);
 
 export const setupSwagger = (app: Express): void => {

@@ -3,6 +3,7 @@ import prisma from "../config/prisma";
 import { uploadToCloudinary, deleteFromCloudinary } from "../config/cloudinary";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { handleControllerError } from "../utils/error-handler";
+import { getParamAsString } from "../utils/params";
 
 const omitPassword = <T extends { password?: string }>(user: T): Omit<T, "password"> => {
   const { password: _password, ...rest } = user;
@@ -15,7 +16,7 @@ const omitPassword = <T extends { password?: string }>(user: T): Omit<T, "passwo
  */
 export const uploadAvatar = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = Number(req.params.id);
+    const userId = getParamAsString(req.params.id);
 
     // Check ownership
     if (req.userId !== userId) {
@@ -68,7 +69,7 @@ export const uploadAvatar = async (req: AuthRequest, res: Response): Promise<voi
  */
 export const deleteAvatar = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = Number(req.params.id);
+    const userId = getParamAsString(req.params.id);
 
     // Check ownership
     if (req.userId !== userId) {
@@ -119,7 +120,7 @@ export const deleteAvatar = async (req: AuthRequest, res: Response): Promise<voi
  */
 export const uploadListingPhotos = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const listingId = Number(req.params.id);
+    const listingId = getParamAsString(req.params.id);
 
     // Find listing
     const listing = await prisma.listing.findUnique({
@@ -193,8 +194,8 @@ export const uploadListingPhotos = async (req: AuthRequest, res: Response): Prom
  */
 export const deleteListingPhoto = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const listingId = Number(req.params.id);
-    const photoId = Number(req.params.photoId);
+    const listingId = getParamAsString(req.params.id);
+    const photoId = getParamAsString(req.params.photoId);
 
     // Find listing
     const listing = await prisma.listing.findUnique({

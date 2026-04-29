@@ -3,6 +3,7 @@ import prisma from "../config/prisma";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { handleControllerError } from "../utils/error-handler";
 import { getCache, setCache, deleteCachePattern, cacheKeys } from "../config/cache";
+import { getParamAsString } from "../utils/params";
 
 /**
  * Get all reviews for a specific listing (paginated)
@@ -10,16 +11,11 @@ import { getCache, setCache, deleteCachePattern, cacheKeys } from "../config/cac
  */
 export const getListingReviews = async (req: Request, res: Response): Promise<void> => {
   try {
-    const listingId = parseInt(req.params.id, 10);
+    const listingId = getParamAsString(req.params.id);
     const page = parseInt(req.query.page as string, 10) || 1;
     const limit = parseInt(req.query.limit as string, 10) || 10;
 
     // Validate parameters
-    if (isNaN(listingId) || listingId < 1) {
-      res.status(400).json({ message: "Invalid listing ID" });
-      return;
-    }
-
     if (page < 1 || limit < 1 || limit > 50) {
       res.status(400).json({ 
         message: "Invalid pagination parameters. Page must be >= 1, limit must be 1-50" 
@@ -100,17 +96,11 @@ export const getListingReviews = async (req: Request, res: Response): Promise<vo
  */
 export const createReview = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const listingId = parseInt(req.params.id, 10);
+    const listingId = getParamAsString(req.params.id);
     const { rating, comment } = req.body as {
       rating?: number;
       comment?: string;
     };
-
-    // Validate parameters
-    if (isNaN(listingId) || listingId < 1) {
-      res.status(400).json({ message: "Invalid listing ID" });
-      return;
-    }
 
     if (!req.userId) {
       res.status(401).json({ message: "Unauthorized" });
@@ -219,7 +209,7 @@ export const createReview = async (req: AuthRequest, res: Response): Promise<voi
 
     await prisma.listing.update({
       where: { id: listingId },
-      data: { rating: avgRating._avg.rating || null }
+      data: { rating: avgRating._avg?.rating ?? null }
     });
 
     res.status(201).json({
@@ -237,12 +227,7 @@ export const createReview = async (req: AuthRequest, res: Response): Promise<voi
  */
 export const deleteReview = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const reviewId = parseInt(req.params.id, 10);
-
-    if (isNaN(reviewId) || reviewId < 1) {
-      res.status(400).json({ message: "Invalid review ID" });
-      return;
-    }
+    const reviewId = getParamAsString(req.params.id);
 
     if (!req.userId) {
       res.status(401).json({ message: "Unauthorized" });
@@ -290,7 +275,7 @@ export const deleteReview = async (req: AuthRequest, res: Response): Promise<voi
 
     await prisma.listing.update({
       where: { id: review.listingId },
-      data: { rating: avgRating._avg.rating || null }
+      data: { rating: avgRating._avg?.rating ?? null }
     });
 
     res.status(200).json({ 
@@ -307,16 +292,11 @@ export const deleteReview = async (req: AuthRequest, res: Response): Promise<voi
  */
 export const getUserReviews = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = parseInt(req.params.id, 10);
+    const userId = getParamAsString(req.params.id);
     const page = parseInt(req.query.page as string, 10) || 1;
     const limit = parseInt(req.query.limit as string, 10) || 10;
 
     // Validate parameters
-    if (isNaN(userId) || userId < 1) {
-      res.status(400).json({ message: "Invalid user ID" });
-      return;
-    }
-
     if (page < 1 || limit < 1 || limit > 50) {
       res.status(400).json({ 
         message: "Invalid pagination parameters. Page must be >= 1, limit must be 1-50" 

@@ -4,6 +4,7 @@ import prisma from "../config/prisma";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { handleControllerError } from "../utils/error-handler";
 import { getCache, setCache, deleteCachePattern, cacheKeys } from "../config/cache";
+import { getParamAsString } from "../utils/params";
 
 const validListingType = (value: string): value is ListingType =>
   Object.values(ListingType).includes(value as ListingType);
@@ -345,7 +346,7 @@ export const getAllListings = async (req: Request, res: Response): Promise<void>
 
 export const getListingById = async (req: Request, res: Response): Promise<void> => {
   try {
-    const id = req.params.id;  // UUID is already a string
+    const id = getParamAsString(req.params.id);
     const listing = await prisma.listing.findUnique({
       where: { id },
       include: {
@@ -426,7 +427,7 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
 
 export const updateListing = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const id = Number(req.params.id);
+    const id = getParamAsString(req.params.id);
     const existingListing = await prisma.listing.findFirst({ where: { id } });
     const isAdmin = String(req.role) === "ADMIN";
 
@@ -465,7 +466,7 @@ export const updateListing = async (req: AuthRequest, res: Response): Promise<vo
 
 export const deleteListing = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const id = Number(req.params.id);
+    const id = getParamAsString(req.params.id);
     const existingListing = await prisma.listing.findFirst({ where: { id } });
     const isAdmin = String(req.role) === "ADMIN";
 

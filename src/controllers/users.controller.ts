@@ -3,6 +3,7 @@ import { Role } from "@prisma/client";
 import bcrypt from "bcrypt";
 import prisma from "../config/prisma";
 import { handleControllerError } from "../utils/error-handler";
+import { getParamAsString } from "../utils/params";
 
 const sanitizeUser = <T extends Record<string, unknown>>(user: T): T => {
   if ("password" in user) {
@@ -25,7 +26,7 @@ export const getAllUsers = async (_req: Request, res: Response): Promise<void> =
 
 export const getUserById = async (req: Request, res: Response): Promise<void> => {
   try {
-    const id = req.params.id;  // UUID is already a string
+    const id = getParamAsString(req.params.id);
     const user = await prisma.user.findUnique({
       where: { id },
       include: { listings: true, bookings: true }
@@ -44,7 +45,7 @@ export const getUserById = async (req: Request, res: Response): Promise<void> =>
 
 export const getUserListings = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.params.id;  // UUID is already a string
+    const userId = getParamAsString(req.params.id);
     const user = await prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
@@ -61,7 +62,7 @@ export const getUserListings = async (req: Request, res: Response): Promise<void
 
 export const getUserBookings = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.params.id;  // UUID is already a string
+    const userId = getParamAsString(req.params.id);
     const user = await prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
@@ -127,7 +128,7 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
 
 export const updateUser = async (req: Request, res: Response): Promise<void> => {
   try {
-    const id = req.params.id;  // UUID is already a string
+    const id = getParamAsString(req.params.id);
     const existingUser = await prisma.user.findFirst({ where: { id } });
 
     if (!existingUser) {
@@ -152,7 +153,7 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
 
 export const deleteUser = async (req: Request, res: Response): Promise<void> => {
   try {
-    const id = req.params.id;  // UUID is already a string
+    const id = getParamAsString(req.params.id);
     const existingUser = await prisma.user.findFirst({ where: { id } });
 
     if (!existingUser) {

@@ -5,6 +5,7 @@ import { sendEmail } from "../config/email";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { handleControllerError } from "../utils/error-handler";
 import { bookingConfirmationEmail, bookingCancellationEmail } from "../templates/emails";
+import { getParamAsString } from "../utils/params";
 
 const validBookingStatus = (value: string): value is BookingStatus =>
   Object.values(BookingStatus).includes(value as BookingStatus);
@@ -82,7 +83,7 @@ export const getAllBookings = async (req: Request, res: Response): Promise<void>
  */
 export const getBookingById = async (req: Request, res: Response): Promise<void> => {
   try {
-    const id = req.params.id;  // UUID is already a string
+    const id = getParamAsString(req.params.id);
 
     const booking = await prisma.booking.findUnique({
       where: { id },
@@ -297,7 +298,7 @@ export const createBooking = async (req: AuthRequest, res: Response): Promise<vo
  */
 export const getUserBookings = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.params.id;  // UUID is already a string
+    const userId = getParamAsString(req.params.id);
     const page = parseInt(req.query.page as string, 10) || 1;
     const limit = parseInt(req.query.limit as string, 10) || 10;
 
@@ -379,7 +380,7 @@ export const getUserBookings = async (req: Request, res: Response): Promise<void
 
 export const updateBookingStatus = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const id = Number(req.params.id);
+    const id = getParamAsString(req.params.id);
     const status = String(req.body.status ?? "").toUpperCase();
 
     if (!validBookingStatus(status)) {
@@ -387,7 +388,18 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response): Prom
       return;
     }
 
-    const existingBooking = await prisma.booking.findFirst({ where: { id } });
+    const existingBooking = await prisma.booking.findFirst({ 
+      where: { id },
+      include: {
+        guest: {
+          select: { id: true, name: true, email: true }
+        },
+        listing: {
+          select: { id: true, title: true, location: true }
+        }
+      }
+    });
+    
     if (!existingBooking) {
       res.status(404).json({ message: "Booking not found" });
       return;
@@ -400,7 +412,15 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response): Prom
 
     const booking = await prisma.booking.update({
       where: { id },
-      data: { status }
+      data: { status },
+      include: {
+        guest: {
+          select: { id: true, name: true, email: true }
+        },
+        listing: {
+          select: { id: true, title: true, location: true }
+        }
+      }
     });
 
     res.status(200).json(booking);
@@ -414,7 +434,7 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response): Prom
  */
 export const deleteBooking = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const id = req.params.id;  // UUID is already a string
+    const id = getParamAsString(req.params.id);
 
     const existingBooking = await prisma.booking.findFirst({ 
       where: { id },

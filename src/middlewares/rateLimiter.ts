@@ -46,10 +46,6 @@ export const strictLimiter = rateLimit({
 export const apiKeyLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 1000, // Higher limit for authenticated API users
-  keyGenerator: (req) => {
-    // Use API key if available, otherwise fall back to IP
-    return req.headers['x-api-key'] as string || req.ip;
-  },
   message: {
     error: 'API rate limit exceeded',
     message: 'Please upgrade your plan or try again later',

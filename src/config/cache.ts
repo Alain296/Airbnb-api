@@ -104,7 +104,7 @@ export const cacheKeys = {
   listings: (page: number, limit: number, filters?: string) => 
     `listings:${page}:${limit}:${filters || 'all'}`,
   
-  listingReviews: (listingId: number, page: number, limit: number) => 
+  listingReviews: (listingId: string, page: number, limit: number) => 
     `listing:${listingId}:reviews:${page}:${limit}`,
   
   listingStats: () => 'stats:listings',
