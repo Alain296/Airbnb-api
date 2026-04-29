@@ -12,7 +12,7 @@
     "outDir": "dist",
     "rootDir": "src",
     "declaration": false,
-    "removeComments": true,
+    "removeComments": false,
     "noImplicitAny": false,
     "strictNullChecks": true,
     "strictFunctionTypes": true,
