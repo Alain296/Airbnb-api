@@ -34,6 +34,11 @@ app.get("/health", (req: Request, res: Response) => {
   });
 });
 
+// Root endpoint - redirect to API docs
+app.get("/", (req: Request, res: Response) => {
+  res.redirect("/api-docs");
+});
+
 // API v1 routes with deprecation headers
 app.use("/api/v1", deprecateV1, v1Router);
 
