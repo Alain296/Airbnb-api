@@ -741,6 +741,281 @@ const swaggerSpec = {
           }
         }
       }
+    },
+
+    // AI FEATURES ENDPOINTS
+    "/api/v1/ai/search": {
+      post: {
+        tags: ["AI Features"],
+        summary: "Smart listing search with AI-powered filter extraction",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["query"],
+                properties: {
+                  query: { type: "string", example: "2 bedroom apartment in downtown under $200", maxLength: 500 }
+                }
+              }
+            }
+          }
+        },
+        parameters: [
+          { name: "page", in: "query", schema: { type: "integer", minimum: 1, default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 50, default: 10 } }
+        ],
+        responses: {
+          "200": {
+            description: "Search results with extracted filters",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    filters: {
+                      type: "object",
+                      properties: {
+                        location: { type: "string", nullable: true },
+                        type: { type: "string", enum: ["APARTMENT", "HOUSE", "STUDIO", "CONDO"], nullable: true },
+                        minPrice: { type: "number", nullable: true },
+                        maxPrice: { type: "number", nullable: true },
+                        guests: { type: "number", nullable: true }
+                      }
+                    },
+                    data: { type: "array", items: { $ref: "#/components/schemas/Listing" } },
+                    meta: {
+                      type: "object",
+                      properties: {
+                        total: { type: "integer" },
+                        page: { type: "integer" },
+                        limit: { type: "integer" },
+                        totalPages: { type: "integer" },
+                        hasNextPage: { type: "boolean" },
+                        hasPrevPage: { type: "boolean" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { description: "Invalid query or parameters" },
+          "429": { description: "AI service is busy" },
+          "500": { description: "AI service error" }
+        }
+      }
+    },
+    "/api/v1/ai/generate-description": {
+      post: {
+        tags: ["AI Features"],
+        summary: "Generate AI-powered listing description",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["title", "location", "type", "guests", "pricePerNight"],
+                properties: {
+                  title: { type: "string", example: "Cozy Downtown Apartment", maxLength: 100 },
+                  location: { type: "string", example: "New York, NY", maxLength: 100 },
+                  type: { type: "string", enum: ["APARTMENT", "HOUSE", "STUDIO", "CONDO"] },
+                  guests: { type: "integer", minimum: 1, maximum: 20, example: 4 },
+                  pricePerNight: { type: "number", minimum: 1, maximum: 10000, example: 150 },
+                  amenities: { type: "array", items: { type: "string" }, example: ["WiFi", "Kitchen", "Parking"] },
+                  tone: { type: "string", enum: ["professional", "friendly", "luxury", "casual"], default: "friendly" }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Generated description",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    description: { type: "string" },
+                    metadata: {
+                      type: "object",
+                      properties: {
+                        tone: { type: "string" },
+                        wordCount: { type: "integer" },
+                        generatedAt: { type: "string", format: "date-time" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { description: "Authentication required" },
+          "400": { description: "Invalid input data" },
+          "429": { description: "AI service is busy" },
+          "500": { description: "AI service error" }
+        }
+      }
+    },
+    "/api/v1/ai/support": {
+      post: {
+        tags: ["AI Features"],
+        summary: "AI-powered guest support chatbot",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["message"],
+                properties: {
+                  message: { type: "string", example: "What are the check-in instructions?", maxLength: 1000 },
+                  listingId: { type: "string", format: "uuid", example: "123e4567-e89b-12d3-a456-426614174000" },
+                  conversationId: { type: "string", format: "uuid", example: "123e4567-e89b-12d3-a456-426614174001" }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "AI support response",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    response: { type: "string" },
+                    conversationId: { type: "string" },
+                    timestamp: { type: "string", format: "date-time" },
+                    hasListingContext: { type: "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { description: "Invalid message format" },
+          "429": { description: "Support chat is busy" },
+          "500": { description: "Support chat temporarily unavailable" }
+        }
+      }
+    },
+    "/api/v1/ai/recommendations": {
+      post: {
+        tags: ["AI Features"],
+        summary: "Get AI-powered booking recommendations",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["preferences"],
+                properties: {
+                  preferences: {
+                    type: "object",
+                    required: ["dates", "guests"],
+                    properties: {
+                      location: { type: "string", example: "New York" },
+                      budget: {
+                        type: "object",
+                        properties: {
+                          min: { type: "number", minimum: 0, example: 100 },
+                          max: { type: "number", minimum: 0, example: 300 }
+                        }
+                      },
+                      dates: {
+                        type: "object",
+                        required: ["checkIn", "checkOut"],
+                        properties: {
+                          checkIn: { type: "string", format: "date-time", example: "2024-12-01T15:00:00Z" },
+                          checkOut: { type: "string", format: "date-time", example: "2024-12-05T11:00:00Z" }
+                        }
+                      },
+                      guests: { type: "integer", minimum: 1, maximum: 20, example: 2 },
+                      amenities: { type: "array", items: { type: "string" }, example: ["WiFi", "Kitchen"] },
+                      type: { type: "string", enum: ["APARTMENT", "HOUSE", "STUDIO", "CONDO"] }
+                    }
+                  },
+                  userId: { type: "string", format: "uuid" }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Personalized recommendations",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    recommendations: { type: "array", items: { $ref: "#/components/schemas/Listing" } },
+                    explanation: { type: "string" },
+                    searchCriteria: { type: "object" },
+                    totalFound: { type: "integer" },
+                    generatedAt: { type: "string", format: "date-time" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { description: "Invalid preferences" },
+          "500": { description: "Recommendation service error" }
+        }
+      }
+    },
+    "/api/v1/ai/reviews/{listingId}/summary": {
+      get: {
+        tags: ["AI Features"],
+        summary: "Get AI-generated review summary for a listing",
+        parameters: [
+          { name: "listingId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          { name: "refresh", in: "query", schema: { type: "boolean", default: false }, description: "Force refresh of cached summary" }
+        ],
+        responses: {
+          "200": {
+            description: "Review summary with insights",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    summary: { type: "string" },
+                    highlights: { type: "array", items: { type: "string" } },
+                    concerns: { type: "array", items: { type: "string" } },
+                    sentiment: { type: "string", enum: ["positive", "mixed", "negative"] },
+                    avgRating: { type: "number" },
+                    totalReviews: { type: "integer" },
+                    ratingDistribution: {
+                      type: "object",
+                      properties: {
+                        "5": { type: "integer" },
+                        "4": { type: "integer" },
+                        "3": { type: "integer" },
+                        "2": { type: "integer" },
+                        "1": { type: "integer" }
+                      }
+                    },
+                    reviewsAnalyzed: { type: "integer" },
+                    generatedAt: { type: "string", format: "date-time" },
+                    cached: { type: "boolean" },
+                    cacheAge: { type: "integer", description: "Cache age in minutes" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { description: "Listing not found or no reviews" },
+          "400": { description: "Invalid listing ID" },
+          "500": { description: "Review analysis service error" }
+        }
+      }
     }
   }
 };
@@ -748,16 +1023,25 @@ const swaggerSpec = {
 console.log("🔍 Swagger specs generated:", Object.keys(swaggerSpec.paths).length, "paths found");
 
 export const setupSwagger = (app: Express): void => {
-  // Swagger UI
+  // Swagger UI with better CORS configuration
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
     explorer: true,
     customCss: ".swagger-ui .topbar { display: none }",
     customSiteTitle: "Airbnb API Documentation",
+    swaggerOptions: {
+      requestInterceptor: (req: any) => {
+        req.headers['Access-Control-Allow-Origin'] = '*';
+        req.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS';
+        req.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
+        return req;
+      }
+    }
   }));
 
   // Raw JSON spec
   app.get("/api-docs.json", (req, res) => {
     res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(swaggerSpec);
   });
 

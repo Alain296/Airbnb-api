@@ -5,7 +5,9 @@ import {
   getAllListings,
   getListingById,
   updateListing,
-  searchListings
+  searchListings,
+  getBlockedDates,
+  setBlockedDates,
 } from "../../controllers/listings.controller";
 import { authenticate, requireHost } from "../../middlewares/auth.middleware";
 import { validate } from "../../middlewares/validate.middleware";
@@ -454,6 +456,10 @@ listingsRouter.put("/:id", authenticate, requireHost, strictLimiter, validate(up
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 listingsRouter.delete("/:id", authenticate, requireHost, strictLimiter, validate(deleteListingSchema), deleteListing);
+
+// Availability / blocked dates
+listingsRouter.get("/:id/blocked-dates", getBlockedDates);
+listingsRouter.put("/:id/blocked-dates", authenticate, requireHost, setBlockedDates);
 
 export default listingsRouter;
 

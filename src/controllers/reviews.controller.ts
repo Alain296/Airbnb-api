@@ -362,3 +362,54 @@ export const getUserReviews = async (req: Request, res: Response): Promise<void>
     handleControllerError(error, res, "reviews.getUserReviews");
   }
 };
+
+/**
+ * Host responds publicly to a review
+ * PATCH /reviews/:id/response
+ */
+export const respondToReview = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const reviewId = getParamAsString(req.params.id);
+    const { response } = req.body as { response?: string };
+
+    if (!req.userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    if (!response || response.trim().length < 5) {
+      res.status(400).json({ message: "Response must be at least 5 characters" });
+      return;
+    }
+    if (response.length > 1000) {
+      res.status(400).json({ message: "Response must be under 1000 characters" });
+      return;
+    }
+
+    const review = await prisma.review.findUnique({
+      where: { id: reviewId },
+      include: { listing: { select: { hostId: true } } },
+    });
+
+    if (!review) { res.status(404).json({ message: "Review not found" }); return; }
+
+    const isAdmin = req.role === "ADMIN";
+    const isHost  = review.listing.hostId === req.userId;
+
+    if (!isAdmin && !isHost) {
+      res.status(403).json({ message: "Only the listing host can respond to reviews" });
+      return;
+    }
+
+    const updated = await prisma.review.update({
+      where: { id: reviewId },
+      data: {
+        hostResponse:    response.trim(),
+        hostRespondedAt: new Date(),
+      },
+      include: { user: { select: { id: true, name: true, avatar: true } } },
+    });
+
+    deleteCachePattern(`listing:${review.listingId}:reviews`);
+
+    res.status(200).json({ message: "Response added successfully", review: updated });
+  } catch (error) {
+    handleControllerError(error, res, "reviews.respondToReview");
+  }
+};

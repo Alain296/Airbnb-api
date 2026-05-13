@@ -395,7 +395,7 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response): Prom
           select: { id: true, name: true, email: true }
         },
         listing: {
-          select: { id: true, title: true, location: true }
+          select: { id: true, title: true, location: true, hostId: true }
         }
       }
     });
@@ -405,8 +405,33 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response): Prom
       return;
     }
 
-    if (req.role !== Role.ADMIN) {
-      res.status(403).json({ message: "Only admins can update booking status" });
+    const isAdmin = req.role === Role.ADMIN;
+    const isHost  = req.userId === existingBooking.listing.hostId;
+    const isGuest = req.userId === existingBooking.guestId;
+
+    // Permission rules:
+    // - Admin: can set any status
+    // - Host: can CONFIRM or CANCEL bookings for their own listings
+    // - Guest: can only CANCEL their own booking (handled by deleteBooking, but allow here too)
+    if (!isAdmin && !isHost && !isGuest) {
+      res.status(403).json({ message: "You are not authorised to update this booking" });
+      return;
+    }
+
+    if (!isAdmin) {
+      if (isHost && status !== "CONFIRMED" && status !== "CANCELLED") {
+        res.status(403).json({ message: "Hosts can only confirm or cancel bookings" });
+        return;
+      }
+      if (isGuest && status !== "CANCELLED") {
+        res.status(403).json({ message: "Guests can only cancel bookings" });
+        return;
+      }
+    }
+
+    // Prevent re-cancelling
+    if (existingBooking.status === BookingStatus.CANCELLED && status === "CANCELLED") {
+      res.status(400).json({ message: "Booking is already cancelled" });
       return;
     }
 
@@ -423,7 +448,36 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response): Prom
       }
     });
 
-    res.status(200).json(booking);
+    // Send email notification to guest on confirm or cancel
+    if (existingBooking.guest && existingBooking.listing) {
+      if (status === "CONFIRMED") {
+        sendEmail(
+          existingBooking.guest.email,
+          "Booking Confirmed!",
+          bookingConfirmationEmail(
+            existingBooking.guest.name,
+            existingBooking.listing.title,
+            existingBooking.listing.location,
+            existingBooking.checkIn.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
+            existingBooking.checkOut.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
+            existingBooking.totalPrice
+          )
+        ).catch(() => {});
+      } else if (status === "CANCELLED") {
+        sendEmail(
+          existingBooking.guest.email,
+          "Booking Cancelled",
+          bookingCancellationEmail(
+            existingBooking.guest.name,
+            existingBooking.listing.title,
+            existingBooking.checkIn.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
+            existingBooking.checkOut.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
+          )
+        ).catch(() => {});
+      }
+    }
+
+    res.status(200).json({ message: "Booking status updated successfully", booking });
   } catch (error) {
     handleControllerError(error, res, "bookings.updateBookingStatus");
   }
@@ -506,5 +560,86 @@ export const deleteBooking = async (req: AuthRequest, res: Response): Promise<vo
     res.status(200).json({ message: "Booking cancelled successfully" });
   } catch (error) {
     handleControllerError(error, res, "bookings.deleteBooking");
+  }
+};
+
+/**
+ * Modify a booking's dates and guest count (Guest only — own bookings)
+ * PATCH /bookings/:id/modify
+ */
+export const modifyBooking = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const id = getParamAsString(req.params.id);
+    const { checkIn, checkOut, guests } = req.body as {
+      checkIn?: string;
+      checkOut?: string;
+      guests?: number;
+    };
+
+    if (!checkIn || !checkOut || guests === undefined) {
+      res.status(400).json({ message: "checkIn, checkOut, and guests are required" });
+      return;
+    }
+
+    const booking = await prisma.booking.findUnique({
+      where: { id },
+      include: { listing: { select: { id: true, hostId: true, pricePerNight: true, guests: true } } },
+    });
+
+    if (!booking) { res.status(404).json({ message: "Booking not found" }); return; }
+
+    const isGuest = req.userId === booking.guestId;
+    const isAdmin = req.role === Role.ADMIN;
+    if (!isGuest && !isAdmin) {
+      res.status(403).json({ message: "You can only modify your own bookings" });
+      return;
+    }
+
+    if (booking.status === BookingStatus.CANCELLED) {
+      res.status(400).json({ message: "Cannot modify a cancelled booking" });
+      return;
+    }
+
+    if (guests > booking.listing.guests) {
+      res.status(400).json({ message: `This listing accommodates max ${booking.listing.guests} guests` });
+      return;
+    }
+
+    const checkInDate  = new Date(checkIn);
+    const checkOutDate = new Date(checkOut);
+
+    if (isNaN(checkInDate.getTime()) || isNaN(checkOutDate.getTime())) {
+      res.status(400).json({ message: "Invalid dates" });
+      return;
+    }
+
+    const nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (nights <= 0) { res.status(400).json({ message: "checkOut must be after checkIn" }); return; }
+
+    // Check for conflicts (excluding this booking)
+    const conflict = await prisma.booking.findFirst({
+      where: {
+        listingId: booking.listingId,
+        status: BookingStatus.CONFIRMED,
+        id: { not: id },
+        AND: [{ checkIn: { lt: checkOutDate } }, { checkOut: { gt: checkInDate } }],
+      },
+    });
+    if (conflict) { res.status(409).json({ message: "Listing is already booked for these dates" }); return; }
+
+    const totalPrice = nights * booking.listing.pricePerNight;
+
+    const updated = await prisma.booking.update({
+      where: { id },
+      data: { checkIn: checkInDate, checkOut: checkOutDate, totalPrice },
+      include: {
+        listing: { select: { id: true, title: true, location: true } },
+        guest:   { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    res.status(200).json({ message: "Booking modified successfully", booking: updated });
+  } catch (error) {
+    handleControllerError(error, res, "bookings.modifyBooking");
   }
 };

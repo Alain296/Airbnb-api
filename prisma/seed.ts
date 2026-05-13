@@ -24,7 +24,7 @@ async function main() {
 
   console.log("👥 Creating users...");
   
-  // 2. Create users (2 hosts, 3 guests)
+  // 2. Create users (2 hosts, 3 guests, 1 admin)
   const hashedPassword = await bcrypt.hash("password123", 10);
 
   // Create HOST users
@@ -86,6 +86,19 @@ async function main() {
       password: hashedPassword,
       role: "GUEST",
       bio: "Business traveler who appreciates comfortable and convenient accommodations.",
+    },
+  });
+
+  // Create ADMIN user
+  const admin = await prisma.user.create({
+    data: {
+      name: "Platform Admin",
+      email: "admin@airbnb.com",
+      username: "platform_admin",
+      phone: "+1-555-0001",
+      password: hashedPassword,
+      role: "ADMIN",
+      bio: "System administrator with full platform moderation access.",
     },
   });
 
@@ -206,7 +219,7 @@ async function main() {
   console.log("✅ Seeding complete!");
   console.log(`
 📊 Database seeded with:
-👥 Users: 5 (2 hosts, 3 guests)
+👥 Users: 6 (2 hosts, 3 guests, 1 admin)
 🏠 Listings: 4 (Villa, Cabin, Apartment, House)
 📅 Bookings: 3 (2 confirmed, 1 pending)
 
@@ -220,6 +233,9 @@ async function main() {
 - alain.test@example.com (Alain Mugabo)
 - emma.guest@example.com (Emma Wilson)  
 - john.guest@example.com (John Davis)
+
+🛡️ Admin:
+- admin@airbnb.com (${admin.name})
   `);
 }
 

@@ -492,3 +492,89 @@ export const deleteListing = async (req: AuthRequest, res: Response): Promise<vo
     handleControllerError(error, res, "listings.deleteListing");
   }
 };
+
+/**
+ * Get blocked dates for a listing
+ * GET /listings/:id/blocked-dates
+ */
+export const getBlockedDates = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = getParamAsString(req.params.id);
+    const listing = await prisma.listing.findUnique({ where: { id } });
+    if (!listing) { res.status(404).json({ message: "Listing not found" }); return; }
+
+    // Also include dates blocked by confirmed bookings
+    const [manualBlocked, confirmedBookings] = await Promise.all([
+      prisma.blockedDate.findMany({ where: { listingId: id }, orderBy: { date: "asc" } }),
+      prisma.booking.findMany({
+        where: { listingId: id, status: "CONFIRMED" },
+        select: { checkIn: true, checkOut: true },
+      }),
+    ]);
+
+    // Expand booking ranges into individual dates
+    const bookingDates: string[] = [];
+    for (const b of confirmedBookings) {
+      const cur = new Date(b.checkIn);
+      const end = new Date(b.checkOut);
+      while (cur < end) {
+        bookingDates.push(cur.toISOString().slice(0, 10));
+        cur.setDate(cur.getDate() + 1);
+      }
+    }
+
+    const manualDates = manualBlocked.map((d) => ({
+      id: d.id,
+      date: d.date.toISOString().slice(0, 10),
+    }));
+
+    res.status(200).json({
+      manual: manualDates,
+      bookings: [...new Set(bookingDates)],
+      minNights: listing.minNights,
+      maxNights: listing.maxNights,
+    });
+  } catch (error) {
+    handleControllerError(error, res, "listings.getBlockedDates");
+  }
+};
+
+/**
+ * Set blocked dates for a listing (replaces all manual blocked dates)
+ * PUT /listings/:id/blocked-dates
+ */
+export const setBlockedDates = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const id = getParamAsString(req.params.id);
+    const { dates } = req.body as { dates?: string[] };
+
+    const listing = await prisma.listing.findUnique({ where: { id } });
+    if (!listing) { res.status(404).json({ message: "Listing not found" }); return; }
+
+    const isAdmin = String(req.role) === "ADMIN";
+    if (!isAdmin && listing.hostId !== req.userId) {
+      res.status(403).json({ message: "You can only manage your own listing's availability" });
+      return;
+    }
+
+    if (!Array.isArray(dates)) {
+      res.status(400).json({ message: "dates must be an array of date strings (YYYY-MM-DD)" });
+      return;
+    }
+
+    // Delete all existing manual blocked dates and recreate
+    await prisma.blockedDate.deleteMany({ where: { listingId: id } });
+
+    if (dates.length > 0) {
+      const records = dates.map((d) => ({
+        listingId: id,
+        date: new Date(d),
+      }));
+      await prisma.blockedDate.createMany({ data: records, skipDuplicates: true });
+    }
+
+    res.status(200).json({ message: "Blocked dates updated", count: dates.length });
+  } catch (error) {
+    handleControllerError(error, res, "listings.setBlockedDates");
+  }
+};

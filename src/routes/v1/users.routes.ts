@@ -6,7 +6,8 @@ import {
   getUserBookings,
   getUserById,
   getUserListings,
-  updateUser
+  updateUser,
+  suspendUser,
 } from "../../controllers/users.controller";
 import { validate } from "../../middlewares/validate.middleware";
 import {
@@ -403,6 +404,7 @@ usersRouter.put("/:id", validate(updateUserSchema), updateUser);
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 usersRouter.delete("/:id", validate(deleteUserSchema), deleteUser);
+usersRouter.patch("/:id/suspend", suspendUser);
 
 export default usersRouter;
 

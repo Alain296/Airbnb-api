@@ -355,8 +355,10 @@ import {
   getMe,
   login,
   register,
-  resetPassword
+  resetPassword,
+  becomeHost,
 } from "../../controllers/auth.controller";
+import { googleAuth, googleCallback } from "../../controllers/oauth.controller";
 import { authenticate } from "../../middlewares/auth.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import {
@@ -573,5 +575,12 @@ authRouter.post("/forgot-password", validate(forgotPasswordSchema), forgotPasswo
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 authRouter.post("/reset-password/:token", validate(resetPasswordSchema), resetPassword);
+
+// ── Google OAuth ──────────────────────────────────────────────────────
+authRouter.get("/google",          googleAuth);
+authRouter.get("/google/callback", googleCallback);
+
+// ── Become a Host ─────────────────────────────────────────────────────
+authRouter.post("/become-host", authenticate, becomeHost);
 
 export default authRouter;

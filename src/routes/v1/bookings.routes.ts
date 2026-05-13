@@ -5,7 +5,8 @@ import {
   getAllBookings,
   getBookingById,
   getUserBookings,
-  updateBookingStatus
+  updateBookingStatus,
+  modifyBooking,
 } from "../../controllers/bookings.controller";
 import { authenticate, requireGuest } from "../../middlewares/auth.middleware";
 import { strictLimiter } from "../../middlewares/rateLimiter";
@@ -231,6 +232,7 @@ bookingsRouter.post("/", authenticate, requireGuest, strictLimiter, validate(cre
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 bookingsRouter.patch("/:id/status", authenticate, strictLimiter, validate(updateBookingStatusSchema), updateBookingStatus);
+bookingsRouter.patch("/:id/modify", authenticate, strictLimiter, modifyBooking);
 
 /**
  * @swagger

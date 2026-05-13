@@ -108,6 +108,12 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // Check if account is suspended
+    if ((user as any).isSuspended) {
+      res.status(403).json({ message: "Your account has been suspended. Please contact support." });
+      return;
+    }
+
     const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
     res.status(200).json({ token, user: omitPassword(user) });
   } catch (error) {
@@ -226,9 +232,44 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
   }
 };
 
+export const becomeHost = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    if (!JWT_SECRET) {
+      res.status(500).json({ message: "JWT_SECRET is not configured" });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: req.userId } });
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    if (user.role === Role.HOST) {
+      res.status(200).json({ message: "Already a host", token: jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: "7d" }), user: omitPassword(user) });
+      return;
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: req.userId },
+      data: { role: Role.HOST },
+    });
+
+    // Issue a new token with the updated role
+    const token = jwt.sign({ userId: updated.id, role: updated.role }, JWT_SECRET, { expiresIn: "7d" });
+    res.status(200).json({ message: "You are now a host!", token, user: omitPassword(updated) });
+  } catch (error) {
+    handleControllerError(error, res, "auth.becomeHost");
+  }
+};
+
 export const resetPassword = async (req: Request, res: Response): Promise<void> => {
   try {
-    const token = req.params.token;
     const { password } = req.body as { password?: string };
 
     if (!token || !password || password.length < 8) {

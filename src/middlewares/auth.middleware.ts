@@ -57,3 +57,31 @@ export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction
 
   next();
 };
+
+export const optionalAuth = (req: AuthRequest, res: Response, next: NextFunction): void => {
+  if (!JWT_SECRET) {
+    // Continue without auth if JWT_SECRET is not configured
+    next();
+    return;
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    // Continue without auth if no token provided
+    next();
+    return;
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; role: Role };
+    req.userId = decoded.userId;
+    req.role = decoded.role;
+  } catch {
+    // Continue without auth if token is invalid
+    // Don't set userId or role
+  }
+
+  next();
+};
