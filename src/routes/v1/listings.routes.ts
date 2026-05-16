@@ -5,9 +5,11 @@ import {
   getAllListings,
   getListingById,
   updateListing,
-  searchListings
+  searchListings,
+  getBlockedDates,
+  setBlockedDates,
 } from "../../controllers/listings.controller";
-import { authenticate, requireHost } from "../../middlewares/auth.middleware";
+import { authenticate, optionalAuth, requireHost } from "../../middlewares/auth.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import { searchLimiter, strictLimiter } from "../../middlewares/rateLimiter";
 import {
@@ -240,7 +242,7 @@ listingsRouter.get("/search", searchLimiter, searchListings);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-listingsRouter.get("/", validate(getAllListingsSchema), getAllListings);
+listingsRouter.get("/", optionalAuth, validate(getAllListingsSchema), getAllListings);
 
 /**
  * @swagger
@@ -270,7 +272,7 @@ listingsRouter.get("/", validate(getAllListingsSchema), getAllListings);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-listingsRouter.get("/:id", validate(getListingByIdSchema), getListingById);
+listingsRouter.get("/:id", optionalAuth, validate(getListingByIdSchema), getListingById);
 
 /**
  * @swagger
@@ -454,6 +456,10 @@ listingsRouter.put("/:id", authenticate, requireHost, strictLimiter, validate(up
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 listingsRouter.delete("/:id", authenticate, requireHost, strictLimiter, validate(deleteListingSchema), deleteListing);
+
+// Availability / blocked dates
+listingsRouter.get("/:id/blocked-dates", getBlockedDates);
+listingsRouter.put("/:id/blocked-dates", authenticate, requireHost, setBlockedDates);
 
 export default listingsRouter;
 

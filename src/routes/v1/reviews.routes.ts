@@ -3,7 +3,8 @@ import {
   getListingReviews,
   createReview,
   deleteReview,
-  getUserReviews
+  getUserReviews,
+  respondToReview,
 } from "../../controllers/reviews.controller";
 import { authenticate } from "../../middlewares/auth.middleware";
 import { strictLimiter } from "../../middlewares/rateLimiter";
@@ -319,5 +320,8 @@ reviewsRouter.delete("/reviews/:id", authenticate, strictLimiter, validate(delet
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 reviewsRouter.get("/users/:id/reviews", validate(getUserReviewsSchema), getUserReviews);
+
+// Host responds publicly to a review
+reviewsRouter.patch("/reviews/:id/response", authenticate, strictLimiter, respondToReview);
 
 export default reviewsRouter;

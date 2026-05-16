@@ -24,7 +24,7 @@ async function main() {
 
   console.log("👥 Creating users...");
   
-  // 2. Create users (2 hosts, 3 guests)
+  // 2. Create users (2 hosts, 3 guests, 1 admin)
   const hashedPassword = await bcrypt.hash("password123", 10);
 
   // Create HOST users
@@ -89,6 +89,19 @@ async function main() {
     },
   });
 
+  // Create ADMIN user
+  const admin = await prisma.user.create({
+    data: {
+      name: "Platform Admin",
+      email: "admin@airbnb.com",
+      username: "platform_admin",
+      phone: "+1-555-0001",
+      password: hashedPassword,
+      role: "ADMIN",
+      bio: "System administrator with full platform moderation access.",
+    },
+  });
+
   console.log("🏠 Creating listings...");
 
   // 3. Create listings (one of each type: APARTMENT, HOUSE, VILLA, CABIN)
@@ -102,6 +115,7 @@ async function main() {
       type: "VILLA",
       amenities: ["WiFi", "Private Pool", "Beach Access", "Ocean Views", "Hot Tub", "Outdoor Kitchen", "Parking"],
       rating: 4.9,
+      isPublished: true,
       hostId: sarah.id,
     },
   });
@@ -116,6 +130,7 @@ async function main() {
       type: "CABIN",
       amenities: ["WiFi", "Fireplace", "Mountain Views", "Hiking Trails", "Kitchen", "Parking"],
       rating: 4.7,
+      isPublished: true,
       hostId: sarah.id,
     },
   });
@@ -130,6 +145,7 @@ async function main() {
       type: "APARTMENT", 
       amenities: ["WiFi", "City Views", "Air Conditioning", "Gym Access", "Rooftop Terrace", "Kitchen"],
       rating: 4.6,
+      isPublished: true,
       hostId: mike.id,
     },
   });
@@ -144,6 +160,7 @@ async function main() {
       type: "HOUSE",
       amenities: ["WiFi", "Garden", "Fireplace", "Kitchen", "Parking", "Country Views"],
       rating: 4.8,
+      isPublished: true,
       hostId: mike.id,
     },
   });
@@ -206,7 +223,7 @@ async function main() {
   console.log("✅ Seeding complete!");
   console.log(`
 📊 Database seeded with:
-👥 Users: 5 (2 hosts, 3 guests)
+👥 Users: 6 (2 hosts, 3 guests, 1 admin)
 🏠 Listings: 4 (Villa, Cabin, Apartment, House)
 📅 Bookings: 3 (2 confirmed, 1 pending)
 
@@ -220,6 +237,9 @@ async function main() {
 - alain.test@example.com (Alain Mugabo)
 - emma.guest@example.com (Emma Wilson)  
 - john.guest@example.com (John Davis)
+
+🛡️ Admin:
+- admin@airbnb.com (${admin.name})
   `);
 }
 

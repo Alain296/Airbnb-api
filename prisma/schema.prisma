@@ -32,6 +32,14 @@ enum BookingStatus {
   CANCELLED
 }
 
+enum CancellationPolicy {
+  FLEXIBLE
+  MODERATE
+  STRICT
+  NON_REFUNDABLE
+  LONG_TERM
+}
+
 model User {
   id               String    @id @default(uuid())
   name             String
@@ -40,9 +48,19 @@ model User {
   phone            String
   password         String    @default("")
   role             Role      @default(GUEST)
+  isSuspended      Boolean   @default(false)
   avatar           String?
   avatarPublicId   String?
   bio              String?
+  // OAuth
+  googleId         String?   @unique
+  appleId          String?   @unique
+  provider         String?   @default("local") // "local" | "google"
+  // MFA / TOTP
+  mfaEnabled       Boolean   @default(false)
+  mfaSecret        String?   // encrypted TOTP secret
+  mfaBackupCodes   String[]  @default([])
+  // Password reset
   resetToken       String?
   resetTokenExpiry DateTime?
   createdAt        DateTime  @default(now())
@@ -50,34 +68,63 @@ model User {
   listings         Listing[]
   bookings         Booking[]
   reviews          Review[]
+  sentMessages     Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+  paymentMethods   PaymentMethod[]
 
   @@index([name])
   @@index([role])
+  @@index([isSuspended])
+  @@index([googleId])
+  @@index([appleId])
 }
 
 model Listing {
-  id            String         @id @default(uuid())
-  title         String
-  description   String
-  location      String
-  pricePerNight Float
-  guests        Int
-  type          ListingType
-  amenities     String[]
-  rating        Float?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  host          User           @relation(fields: [hostId], references: [id], onDelete: Restrict)
-  hostId        String
-  bookings      Booking[]
-  photos        ListingPhoto[]
-  reviews       Review[]
+  id                 String              @id @default(uuid())
+  title              String
+  description        String
+  location           String
+  pricePerNight      Float
+  weekendPrice       Float?
+  weeklyDiscount     Float?              // percentage e.g. 10 = 10%
+  monthlyDiscount    Float?              // percentage e.g. 20 = 20%
+  extraGuestFee      Float?              // fee per extra guest above base
+  baseGuests         Int?                // guests included in base price
+  guests             Int
+  type               ListingType
+  amenities          String[]
+  rating             Float?
+  isPublished        Boolean             @default(false)
+  cancellationPolicy CancellationPolicy  @default(FLEXIBLE)
+  minNights          Int                 @default(1)
+  maxNights          Int?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  host               User                @relation(fields: [hostId], references: [id], onDelete: Restrict)
+  hostId             String
+  bookings           Booking[]
+  photos             ListingPhoto[]
+  reviews            Review[]
+  blockedDates       BlockedDate[]
 
   @@index([hostId])
   @@index([location])
   @@index([type])
   @@index([pricePerNight])
   @@index([guests])
+  @@index([isPublished])
+}
+
+model BlockedDate {
+  id        String   @id @default(uuid())
+  date      DateTime
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listingId String
+  createdAt DateTime @default(now())
+
+  @@unique([listingId, date])
+  @@index([listingId])
+  @@index([date])
 }
 
 model Booking {
@@ -91,12 +138,46 @@ model Booking {
   guestId    String
   listing    Listing       @relation(fields: [listingId], references: [id], onDelete: Restrict)
   listingId  String
+  messages   Message[]
 
   @@index([guestId])
   @@index([listingId])
   @@index([status])
   @@index([checkIn])
   @@index([checkOut])
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  text       String
+  createdAt  DateTime @default(now())
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId  String
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  senderId   String
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  receiverId String
+
+  @@index([bookingId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([createdAt])
+}
+
+model PaymentMethod {
+  id          String   @id @default(uuid())
+  brand       String
+  last4       String
+  expiryMonth Int
+  expiryYear  Int
+  holderName  String
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+
+  @@index([userId])
 }
 
 model ListingPhoto {
@@ -109,15 +190,17 @@ model ListingPhoto {
 }
 
 model Review {
-  id        String   @id @default(uuid())
-  rating    Int      // 1-5 stars
-  comment   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  listingId String
+  id             String   @id @default(uuid())
+  rating         Int      // 1-5 stars
+  comment        String
+  hostResponse   String?  // host's public reply to this review
+  hostRespondedAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  listing        Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listingId      String
 
   @@index([userId])
   @@index([listingId])

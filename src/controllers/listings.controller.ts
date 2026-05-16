@@ -71,8 +71,8 @@ export const searchListings = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    // Build dynamic where clause
-    const where: Prisma.ListingWhereInput = {};
+    // Public search must only show listings approved by an admin.
+    const where: Prisma.ListingWhereInput = { isPublished: true };
 
     if (location) {
       where.location = { 
@@ -220,7 +220,7 @@ export const searchListings = async (req: Request, res: Response): Promise<void>
   }
 };
 
-export const getAllListings = async (req: Request, res: Response): Promise<void> => {
+export const getAllListings = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const location = req.query.location as string | undefined;
     const type = req.query.type as string | undefined;
@@ -238,8 +238,13 @@ export const getAllListings = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    // Build cache key from query parameters
+    const isAdmin = req.role === Role.ADMIN;
+    const isHost = req.role === Role.HOST && !!req.userId;
+    const visibilityScope = isAdmin ? "admin" : isHost ? `host:${req.userId}` : "public";
+
+    // Build cache key from query parameters and viewer scope.
     const queryParams = new URLSearchParams({
+      scope: visibilityScope,
       ...(location && { location }),
       ...(type && { type }),
       ...(maxPriceRaw && { maxPrice: maxPriceRaw }),
@@ -258,7 +263,11 @@ export const getAllListings = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const where: Prisma.ListingWhereInput = {};
+    const where: Prisma.ListingWhereInput = isAdmin
+      ? {}
+      : isHost
+        ? { OR: [{ isPublished: true }, { hostId: req.userId }] }
+        : { isPublished: true };
 
     if (location) {
       where.location = { contains: location, mode: "insensitive" };
@@ -296,11 +305,22 @@ export const getAllListings = async (req: Request, res: Response): Promise<void>
         select: {
           id: true,
           title: true,
+          description: true,
           location: true,
           pricePerNight: true,
+          weekendPrice: true,
+          weeklyDiscount: true,
+          monthlyDiscount: true,
+          extraGuestFee: true,
+          baseGuests: true,
           guests: true,
           type: true,
+          amenities: true,
           rating: true,
+          isPublished: true,
+          cancellationPolicy: true,
+          minNights: true,
+          maxNights: true,
           createdAt: true,
           host: { 
             select: { 
@@ -344,18 +364,40 @@ export const getAllListings = async (req: Request, res: Response): Promise<void>
   }
 };
 
-export const getListingById = async (req: Request, res: Response): Promise<void> => {
+export const getListingById = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const id = getParamAsString(req.params.id);
     const listing = await prisma.listing.findUnique({
       where: { id },
       include: {
         host: true,
-        bookings: true
+        bookings: true,
+        photos: {
+          select: {
+            id: true,
+            url: true,
+            publicId: true,
+            createdAt: true
+          },
+          orderBy: { createdAt: "asc" }
+        },
+        _count: {
+          select: { reviews: true, bookings: true }
+        }
       }
     });
 
     if (!listing) {
+      res.status(404).json({ message: "Listing not found" });
+      return;
+    }
+
+    const canViewUnpublished =
+      listing.isPublished ||
+      req.role === Role.ADMIN ||
+      (req.role === Role.HOST && req.userId === listing.hostId);
+
+    if (!canViewUnpublished) {
       res.status(404).json({ message: "Listing not found" });
       return;
     }
@@ -368,7 +410,24 @@ export const getListingById = async (req: Request, res: Response): Promise<void>
 
 export const createListing = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { title, description, location, pricePerNight, guests, type, amenities, rating } = req.body as {
+    const {
+      title,
+      description,
+      location,
+      pricePerNight,
+      guests,
+      type,
+      amenities,
+      rating,
+      cancellationPolicy,
+      weekendPrice,
+      weeklyDiscount,
+      monthlyDiscount,
+      extraGuestFee,
+      baseGuests,
+      minNights,
+      maxNights,
+    } = req.body as {
         title?: string;
         description?: string;
         location?: string;
@@ -377,6 +436,14 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
         type?: ListingType;
         amenities?: string[];
         rating?: number;
+        cancellationPolicy?: Prisma.ListingCreateInput["cancellationPolicy"];
+        weekendPrice?: number;
+        weeklyDiscount?: number;
+        monthlyDiscount?: number;
+        extraGuestFee?: number;
+        baseGuests?: number;
+        minNights?: number;
+        maxNights?: number;
       };
 
     if (
@@ -407,6 +474,15 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
         type,
         amenities,
         rating,
+        cancellationPolicy,
+        weekendPrice,
+        weeklyDiscount,
+        monthlyDiscount,
+        extraGuestFee,
+        baseGuests,
+        minNights,
+        maxNights,
+        isPublished: false,
         hostId: req.userId
       }
     });
@@ -417,7 +493,7 @@ export const createListing = async (req: AuthRequest, res: Response): Promise<vo
     deleteCachePattern('stats:listings');
 
     res.status(201).json({
-      message: "Listing created successfully",
+      message: "Listing submitted for admin approval. It will be visible to guests after an admin publishes it.",
       listing
     });
   } catch (error) {
@@ -443,11 +519,13 @@ export const updateListing = async (req: AuthRequest, res: Response): Promise<vo
 
     if (!isAdmin) {
       delete req.body.hostId;
+      delete req.body.rating;
+      delete req.body.isPublished;
     }
 
     const listing = await prisma.listing.update({
       where: { id },
-      data: req.body
+      data: isAdmin ? req.body : { ...req.body, isPublished: false }
     });
 
     // Clear relevant caches
@@ -456,7 +534,9 @@ export const updateListing = async (req: AuthRequest, res: Response): Promise<vo
     deleteCachePattern('stats:listings');
 
     res.status(200).json({
-      message: "Listing updated successfully",
+      message: isAdmin
+        ? "Listing updated successfully"
+        : "Listing updated and sent back for admin approval before it appears to guests.",
       listing
     });
   } catch (error) {
@@ -490,5 +570,91 @@ export const deleteListing = async (req: AuthRequest, res: Response): Promise<vo
     res.status(200).json({ message: "Listing deleted successfully" });
   } catch (error) {
     handleControllerError(error, res, "listings.deleteListing");
+  }
+};
+
+/**
+ * Get blocked dates for a listing
+ * GET /listings/:id/blocked-dates
+ */
+export const getBlockedDates = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = getParamAsString(req.params.id);
+    const listing = await prisma.listing.findUnique({ where: { id } });
+    if (!listing) { res.status(404).json({ message: "Listing not found" }); return; }
+
+    // Also include dates blocked by confirmed bookings
+    const [manualBlocked, confirmedBookings] = await Promise.all([
+      prisma.blockedDate.findMany({ where: { listingId: id }, orderBy: { date: "asc" } }),
+      prisma.booking.findMany({
+        where: { listingId: id, status: "CONFIRMED" },
+        select: { checkIn: true, checkOut: true },
+      }),
+    ]);
+
+    // Expand booking ranges into individual dates
+    const bookingDates: string[] = [];
+    for (const b of confirmedBookings) {
+      const cur = new Date(b.checkIn);
+      const end = new Date(b.checkOut);
+      while (cur < end) {
+        bookingDates.push(cur.toISOString().slice(0, 10));
+        cur.setDate(cur.getDate() + 1);
+      }
+    }
+
+    const manualDates = manualBlocked.map((d) => ({
+      id: d.id,
+      date: d.date.toISOString().slice(0, 10),
+    }));
+
+    res.status(200).json({
+      manual: manualDates,
+      bookings: [...new Set(bookingDates)],
+      minNights: listing.minNights,
+      maxNights: listing.maxNights,
+    });
+  } catch (error) {
+    handleControllerError(error, res, "listings.getBlockedDates");
+  }
+};
+
+/**
+ * Set blocked dates for a listing (replaces all manual blocked dates)
+ * PUT /listings/:id/blocked-dates
+ */
+export const setBlockedDates = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const id = getParamAsString(req.params.id);
+    const { dates } = req.body as { dates?: string[] };
+
+    const listing = await prisma.listing.findUnique({ where: { id } });
+    if (!listing) { res.status(404).json({ message: "Listing not found" }); return; }
+
+    const isAdmin = String(req.role) === "ADMIN";
+    if (!isAdmin && listing.hostId !== req.userId) {
+      res.status(403).json({ message: "You can only manage your own listing's availability" });
+      return;
+    }
+
+    if (!Array.isArray(dates)) {
+      res.status(400).json({ message: "dates must be an array of date strings (YYYY-MM-DD)" });
+      return;
+    }
+
+    // Delete all existing manual blocked dates and recreate
+    await prisma.blockedDate.deleteMany({ where: { listingId: id } });
+
+    if (dates.length > 0) {
+      const records = dates.map((d) => ({
+        listingId: id,
+        date: new Date(d),
+      }));
+      await prisma.blockedDate.createMany({ data: records, skipDuplicates: true });
+    }
+
+    res.status(200).json({ message: "Blocked dates updated", count: dates.length });
+  } catch (error) {
+    handleControllerError(error, res, "listings.setBlockedDates");
   }
 };

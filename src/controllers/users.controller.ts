@@ -167,3 +167,34 @@ export const deleteUser = async (req: Request, res: Response): Promise<void> => 
     handleControllerError(error, res, "users.deleteUser");
   }
 };
+
+/**
+ * Suspend or unsuspend a user account (Admin only)
+ * PATCH /users/:id/suspend
+ */
+export const suspendUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = getParamAsString(req.params.id);
+    const { suspend } = req.body as { suspend?: boolean };
+
+    if (typeof suspend !== 'boolean') {
+      res.status(400).json({ message: "suspend must be a boolean" });
+      return;
+    }
+
+    const existing = await prisma.user.findUnique({ where: { id } });
+    if (!existing) { res.status(404).json({ message: "User not found" }); return; }
+
+    const user = await prisma.user.update({
+      where: { id },
+      data: { isSuspended: suspend },
+    });
+
+    res.status(200).json({
+      message: suspend ? "User suspended successfully" : "User unsuspended successfully",
+      user: sanitizeUser(user as unknown as Record<string, unknown>),
+    });
+  } catch (error) {
+    handleControllerError(error, res, "users.suspendUser");
+  }
+};
